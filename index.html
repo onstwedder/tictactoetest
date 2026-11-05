@@ -1,0 +1,504 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Tic Tac Toe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gochi+Hand&family=Patrick+Hand&display=swap">
+<style>
+  /* Layout: a game scrawled on squared paper (light) or a chalkboard (dark); big board left, score and options right. */
+  :root {
+    --paper: #f2f6f8;
+    --rule: #d3e1ea;
+    --ink: #262d3d;
+    --soft: #5a6478;
+    --x: #1c3fc0;
+    --o: #c42b3a;
+    --wash: #dfe9f0;
+    --display: "Gochi Hand", "Comic Sans MS", "Segoe Print", cursive;
+    --body: "Patrick Hand", "Comic Sans MS", "Segoe Print", cursive;
+    --sketch: 255px 18px 225px 18px / 18px 225px 18px 255px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1d2c28; --rule: #273a35; --ink: #eaefe6; --soft: #a9b8ae;
+      --x: #f5e17c; --o: #f6a0b2; --wash: #2b403a; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #1d2c28; --rule: #273a35; --ink: #eaefe6; --soft: #a9b8ae;
+    --x: #f5e17c; --o: #f6a0b2; --wash: #2b403a; color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 26px 26px;
+    color: var(--ink);
+    font: 400 1.2rem/1.35 var(--body);
+  }
+
+  main {
+    min-height: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 560px) minmax(250px, 320px);
+    grid-template-areas: "board head" "board side";
+    grid-template-rows: auto 1fr;
+    column-gap: clamp(32px, 6vw, 72px);
+    row-gap: 28px;
+    justify-content: center;
+    align-content: center;
+    padding-block: 28px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  header { grid-area: head; display: grid; gap: 8px; }
+  .side { grid-area: side; display: grid; gap: 24px; align-content: start; }
+
+  h1 {
+    margin: 0;
+    font: 400 clamp(2.8rem, 6vw, 4.2rem)/1 var(--display);
+    transform: rotate(-1.5deg);
+    transform-origin: left center;
+    text-wrap: balance;
+  }
+  #status { margin: 0; min-height: 2.7rem; font: 400 1.75rem/1.3 var(--display); }
+  #status[data-mark="X"] { color: var(--x); }
+  #status[data-mark="O"] { color: var(--o); }
+
+  /* Board */
+  .board {
+    grid-area: board;
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    aspect-ratio: 1;
+    align-self: center;
+  }
+  .board > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .rough { filter: url(#rough); }
+  .cells { position: absolute; inset: 0; display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); }
+  .cell {
+    appearance: none; background: none; border: 0; padding: 7%; margin: 0;
+    color: inherit; cursor: pointer; min-width: 0; min-height: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .cell[aria-disabled="true"] { cursor: default; }
+  .cell:focus-visible { outline: 3px dashed var(--soft); outline-offset: -8px; border-radius: 16px; }
+  .cell svg { display: block; width: 100%; height: 100%; }
+
+  path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .grid-line { stroke: var(--ink); stroke-width: 3.5; }
+  .mark-x path { stroke: var(--x); stroke-width: 9; }
+  .mark-o path { stroke: var(--o); stroke-width: 9; }
+  .win-line { stroke: var(--ink); stroke-width: 6; }
+
+  .draw {
+    stroke-dasharray: 1.02 2;
+    animation: draw .26s ease-out both;
+  }
+  .draw.second { animation-delay: .2s; }
+  .grid-line.draw { animation-duration: .4s; }
+  .grid-line.draw:nth-child(2) { animation-delay: .12s; }
+  .grid-line.draw:nth-child(3) { animation-delay: .24s; }
+  .grid-line.draw:nth-child(4) { animation-delay: .36s; }
+  .win-line.draw { animation-duration: .4s; animation-delay: .3s; }
+  @keyframes draw { from { stroke-dashoffset: 1.03; } to { stroke-dashoffset: 0; } }
+
+  .ghost { opacity: 0; transition: opacity .12s; }
+  @media (hover: hover) {
+    .cell:hover .ghost { opacity: .24; }
+  }
+  .cell:focus-visible .ghost { opacity: .24; }
+
+  /* Tally */
+  .tally { display: grid; gap: 6px; margin: 0; }
+  .tally > div {
+    display: grid;
+    grid-template-columns: 7.5em minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    min-height: 34px;
+  }
+  .tally dt { color: var(--soft); }
+  .tally dd { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+  .tally dd svg { width: 40px; height: 28px; display: block; }
+  .tally dd path { stroke: var(--ink); stroke-width: 2.6; }
+  .tally dd[data-who="X"] path { stroke: var(--x); }
+  .tally dd[data-who="O"] path { stroke: var(--o); }
+  .none { color: var(--soft); }
+
+  /* Options */
+  .options { display: grid; gap: 14px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 4px; }
+  legend { padding: 0; margin-bottom: 4px; color: var(--soft); }
+  .choices { display: flex; flex-wrap: wrap; gap: 8px; }
+  .choices input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .choices label {
+    padding: 4px 14px;
+    border: 2px solid transparent;
+    border-radius: var(--sketch);
+    cursor: pointer;
+  }
+  .choices label:hover { background: var(--wash); }
+  .choices input:checked + label { border-color: var(--ink); background: var(--wash); }
+  .choices input:focus-visible + label { outline: 3px dashed var(--soft); outline-offset: 2px; }
+  .hint { margin: 2px 0 0; color: var(--soft); font-size: 1.05rem; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  button.action {
+    font: inherit;
+    color: var(--ink);
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: var(--sketch);
+    padding: 7px 18px;
+    cursor: pointer;
+    transition: transform .12s;
+  }
+  button.action:hover { transform: rotate(-1.5deg); }
+  button.action:focus-visible { outline: 3px dashed var(--soft); outline-offset: 2px; }
+  button.primary { background: var(--ink); color: var(--paper); }
+
+  @media (max-width: 760px) {
+    main {
+      grid-template-columns: minmax(0, 480px);
+      grid-template-areas: "head" "board" "side";
+      grid-template-rows: auto auto auto;
+      row-gap: 20px;
+      align-content: start;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .draw { animation: none; }
+    button.action, .ghost { transition: none; }
+  }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"></feTurbulence>
+    <feDisplacementMap in="SourceGraphic" scale="4"></feDisplacementMap>
+  </filter>
+</svg>
+
+<main>
+  <header>
+    <h1>Tic Tac Toe</h1>
+    <p id="status" role="status" aria-live="polite"></p>
+  </header>
+
+  <div class="board">
+    <svg class="rough" viewBox="0 0 300 300" aria-hidden="true">
+      <path class="grid-line draw" pathLength="1" d="M101 8 C97 90 104 205 99 292"></path>
+      <path class="grid-line draw" pathLength="1" d="M199 6 C203 100 196 200 201 294"></path>
+      <path class="grid-line draw" pathLength="1" d="M7 99 C90 104 205 96 293 101"></path>
+      <path class="grid-line draw" pathLength="1" d="M6 201 C100 197 200 204 294 199"></path>
+    </svg>
+    <div class="cells" id="cells" role="group" aria-label="Game board. Use the arrow keys to move between squares."></div>
+    <svg class="rough" id="win" viewBox="0 0 300 300" aria-hidden="true"></svg>
+  </div>
+
+  <div class="side">
+    <div class="actions">
+      <button class="action primary" id="new-round" type="button">New round</button>
+      <button class="action" id="clear-tally" type="button">Clear tally</button>
+    </div>
+
+    <dl class="tally">
+      <div><dt id="label-x"></dt><dd id="tally-x" data-who="X"></dd></div>
+      <div><dt id="label-o"></dt><dd id="tally-o" data-who="O"></dd></div>
+      <div><dt>Draws</dt><dd id="tally-d"></dd></div>
+    </dl>
+
+    <div class="options">
+      <fieldset>
+        <legend>Play against</legend>
+        <div class="choices">
+          <input type="radio" name="mode" id="mode-cpu" value="cpu"><label for="mode-cpu">Computer</label>
+          <input type="radio" name="mode" id="mode-friend" value="friend"><label for="mode-friend">A friend</label>
+        </div>
+      </fieldset>
+      <fieldset id="skill-set">
+        <legend>Computer skill</legend>
+        <div class="choices">
+          <input type="radio" name="skill" id="skill-easy" value="easy"><label for="skill-easy">Easy</label>
+          <input type="radio" name="skill" id="skill-fair" value="fair"><label for="skill-fair">Fair</label>
+          <input type="radio" name="skill" id="skill-perfect" value="perfect"><label for="skill-perfect">Perfect</label>
+        </div>
+        <p class="hint" id="skill-hint"></p>
+      </fieldset>
+      <p class="hint">Changing these starts a new game and clears the tally.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+// --- game rules and computer player (no page access) ---
+const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const other = m => (m === 'X' ? 'O' : 'X');
+const empties = b => b.flatMap((v, i) => (v ? [] : [i]));
+
+function winner(b) {
+  for (const line of LINES) {
+    const [p, q, r] = line;
+    if (b[p] && b[p] === b[q] && b[p] === b[r]) return { mark: b[p], line };
+  }
+  return null;
+}
+
+function minimax(b, turn, me, depth) {
+  const w = winner(b);
+  if (w) return w.mark === me ? 10 - depth : depth - 10;
+  const free = empties(b);
+  if (!free.length) return 0;
+  let best = turn === me ? -Infinity : Infinity;
+  for (const i of free) {
+    b[i] = turn;
+    const score = minimax(b, other(turn), me, depth + 1);
+    b[i] = null;
+    best = turn === me ? Math.max(best, score) : Math.min(best, score);
+  }
+  return best;
+}
+
+function pickMove(b, me, skill) {
+  const free = empties(b);
+  const any = list => list[Math.floor(Math.random() * list.length)];
+  if (skill === 'easy') return any(free);
+  if (skill === 'fair') {
+    const completing = m => free.filter(i => { const t = [...b]; t[i] = m; return winner(t); });
+    const wins = completing(me);
+    if (wins.length) return any(wins);
+    const blocks = completing(other(me));
+    return any(blocks.length ? blocks : free);
+  }
+  let top = -Infinity, moves = [];
+  for (const i of free) {
+    const t = [...b];
+    t[i] = me;
+    const score = minimax(t, other(me), me, 1);
+    if (score > top) { top = score; moves = [i]; }
+    else if (score === top) moves.push(i);
+  }
+  return any(moves);
+}
+// --- end of rules ---
+
+const $ = id => document.getElementById(id);
+const STORE_KEY = 'tic-tac-toe';
+const HINTS = {
+  easy: 'Plays at random.',
+  fair: 'Takes a win and blocks yours, otherwise guesses.',
+  perfect: 'Never loses. A draw is the best you can get.',
+};
+const SHAPES = {
+  X: [
+    ['M22 20 C38 38 60 62 80 82', 'M79 18 C62 38 40 60 20 80'],
+    ['M18 24 C40 40 58 60 83 78', 'M74 15 C64 40 42 62 26 85'],
+    ['M26 16 C36 40 62 64 76 85', 'M84 24 C62 36 38 58 16 76'],
+  ],
+  O: [
+    ['M52 17 C28 14 15 34 18 55 C21 78 44 88 64 80 C84 72 88 44 74 28 C66 19 54 15 44 20'],
+    ['M46 15 C24 20 14 42 20 60 C27 82 52 88 70 76 C88 62 86 34 68 22 C60 16 50 14 40 19'],
+    ['M56 19 C34 12 16 30 16 50 C16 74 38 86 58 83 C80 79 90 52 78 32 C72 22 60 15 48 18'],
+  ],
+};
+
+const state = {
+  board: Array(9).fill(null), turn: 'X', starter: 'X', over: false, result: null,
+  mode: 'cpu', skill: 'fair', tally: { X: 0, O: 0, D: 0 },
+};
+let cells = [];
+let timer = null;
+let moveCount = 0;
+
+function markSvg(mark, variant, ghost) {
+  const paths = SHAPES[mark][variant].map((d, n) =>
+    `<path pathLength="1" d="${d}"${ghost ? '' : ` class="draw${n ? ' second' : ''}"`}></path>`).join('');
+  return `<svg class="rough mark-${mark.toLowerCase()}${ghost ? ' ghost' : ''}" viewBox="0 0 100 100" aria-hidden="true">${paths}</svg>`;
+}
+
+function tallySvg(strokes) {
+  const xs = [6, 13, 20, 27];
+  const tilt = [1, -1, 1, 0];
+  let d = '';
+  for (let i = 0; i < Math.min(strokes, 4); i++) d += `M${xs[i]} 4 L${xs[i] + tilt[i]} 25 `;
+  if (strokes === 5) d += 'M1 21 L33 7';
+  return `<svg class="rough" viewBox="0 0 40 28" aria-hidden="true"><path d="${d}"></path></svg>`;
+}
+
+function renderTally(el, n) {
+  el.setAttribute('aria-label', String(n));
+  if (!n) { el.innerHTML = '<span class="none">none yet</span>'; return; }
+  el.innerHTML = tallySvg(5).repeat(Math.floor(n / 5)) + (n % 5 ? tallySvg(n % 5) : '');
+}
+
+const canHumanMove = () => !state.over && !(state.mode === 'cpu' && state.turn === 'O');
+
+function statusText() {
+  const cpu = state.mode === 'cpu';
+  if (state.over) {
+    if (!state.result) return "Cat's game. Nobody wins.";
+    if (cpu) return state.result.mark === 'X' ? 'You win!' : 'The computer wins.';
+    return `${state.result.mark} wins!`;
+  }
+  if (cpu) return state.turn === 'X' ? "Your turn. You're X." : 'The computer is thinking…';
+  return `${state.turn} to play.`;
+}
+
+function refresh() {
+  const status = $('status');
+  status.textContent = statusText();
+  const lead = state.over ? (state.result && state.result.mark) : state.turn;
+  if (lead) status.dataset.mark = lead; else delete status.dataset.mark;
+
+  const human = canHumanMove();
+  state.board.forEach((mark, i) => {
+    const cell = cells[i];
+    const place = `Row ${Math.floor(i / 3) + 1}, column ${i % 3 + 1}`;
+    cell.setAttribute('aria-label', `${place}, ${mark || 'empty'}`);
+    cell.setAttribute('aria-disabled', String(!!mark || !human));
+    if (!mark) cell.innerHTML = human ? markSvg(state.turn, 0, true) : '';
+  });
+
+  const cpu = state.mode === 'cpu';
+  $('label-x').textContent = cpu ? 'You (X)' : 'X';
+  $('label-o').textContent = cpu ? 'Computer (O)' : 'O';
+  renderTally($('tally-x'), state.tally.X);
+  renderTally($('tally-o'), state.tally.O);
+  renderTally($('tally-d'), state.tally.D);
+  $('skill-set').hidden = !cpu;
+  $('skill-hint').textContent = HINTS[state.skill];
+}
+
+function drawWinLine(line) {
+  const centre = i => [50 + (i % 3) * 100, 50 + Math.floor(i / 3) * 100];
+  const [ax, ay] = centre(line[0]);
+  const [bx, by] = centre(line[2]);
+  const len = Math.hypot(bx - ax, by - ay);
+  const ux = (bx - ax) / len, uy = (by - ay) / len;
+  const sx = ax - ux * 36, sy = ay - uy * 36, ex = bx + ux * 36, ey = by + uy * 36;
+  const mx = (sx + ex) / 2 - uy * 6, my = (sy + ey) / 2 + ux * 6;
+  $('win').innerHTML = `<path class="win-line draw" pathLength="1" d="M${sx} ${sy} Q${mx} ${my} ${ex} ${ey}"></path>`;
+}
+
+function play(i) {
+  if (state.board[i] || state.over) return;
+  const mark = state.turn;
+  state.board[i] = mark;
+  cells[i].innerHTML = markSvg(mark, moveCount++ % 3, false);
+
+  const w = winner(state.board);
+  if (w || !empties(state.board).length) {
+    state.over = true;
+    state.result = w;
+    state.tally[w ? w.mark : 'D']++;
+    if (w) drawWinLine(w.line);
+    save();
+  } else {
+    state.turn = other(mark);
+  }
+  refresh();
+
+  if (!state.over && state.mode === 'cpu' && state.turn === 'O') scheduleComputer();
+}
+
+function scheduleComputer() {
+  timer = setTimeout(() => play(pickMove(state.board, 'O', state.skill)), 550);
+}
+
+function startRound() {
+  clearTimeout(timer);
+  state.board = Array(9).fill(null);
+  state.turn = state.starter;
+  state.over = false;
+  state.result = null;
+  $('win').innerHTML = '';
+  cells.forEach(c => { c.innerHTML = ''; });
+  refresh();
+  if (state.mode === 'cpu' && state.turn === 'O') scheduleComputer();
+}
+
+function restartGame() {
+  state.tally = { X: 0, O: 0, D: 0 };
+  state.starter = 'X';
+  save();
+  startRound();
+}
+
+function save() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ mode: state.mode, skill: state.skill, tally: state.tally }));
+  } catch (e) { /* storage unavailable: the game still works for this visit */ }
+}
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (!saved) return;
+    if (saved.mode in { cpu: 1, friend: 1 }) state.mode = saved.mode;
+    if (saved.skill in HINTS) state.skill = saved.skill;
+    for (const k of ['X', 'O', 'D']) {
+      const n = saved.tally && saved.tally[k];
+      if (Number.isInteger(n) && n >= 0) state.tally[k] = n;
+    }
+  } catch (e) { /* no saved game to restore */ }
+}
+
+function moveFocus(i, key) {
+  const row = Math.floor(i / 3), col = i % 3;
+  const next = {
+    ArrowLeft: row * 3 + (col + 2) % 3,
+    ArrowRight: row * 3 + (col + 1) % 3,
+    ArrowUp: ((row + 2) % 3) * 3 + col,
+    ArrowDown: ((row + 1) % 3) * 3 + col,
+  }[key];
+  if (next === undefined) return false;
+  cells[next].focus();
+  return true;
+}
+
+function init() {
+  load();
+  const grid = $('cells');
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = 'cell';
+    cell.id = `cell-${i}`;
+    cell.addEventListener('click', () => { if (canHumanMove()) play(i); });
+    cell.addEventListener('keydown', e => { if (moveFocus(i, e.key)) e.preventDefault(); });
+    grid.append(cell);
+    cells.push(cell);
+  }
+
+  $(`mode-${state.mode}`).checked = true;
+  $(`skill-${state.skill}`).checked = true;
+  document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', () => {
+    state.mode = r.value;
+    restartGame();
+  }));
+  document.querySelectorAll('input[name="skill"]').forEach(r => r.addEventListener('change', () => {
+    state.skill = r.value;
+    restartGame();
+  }));
+  $('new-round').addEventListener('click', () => {
+    state.starter = other(state.starter);
+    startRound();
+  });
+  $('clear-tally').addEventListener('click', () => {
+    state.tally = { X: 0, O: 0, D: 0 };
+    save();
+    refresh();
+  });
+  startRound();
+}
+
+init();
+</script>
